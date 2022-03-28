@@ -130,10 +130,11 @@ end
 
 
 function hmtdsecoverage(triples::Vector{DSETriple}, pg::Cite2Urn, height = 200, textlist = [])
-    @info("Text list is $(typeof(textlist)): nothing? $(isnothing(textlist))")
+    
     surfacetriples = filter(row -> urncontains(pg, row.surface), triples)
     iliadtriples = filter(row -> urncontains(CtsUrn("urn:cts:greekLit:tlg0012.tlg001:"), row.passage), surfacetriples)
     iliadrange = "Includes *Iliad* $(iliadtriples[1].passage |> passagecomponent)-$(iliadtriples[end].passage |> passagecomponent)."
+
 
 
     #isnothing(textlist) || 
@@ -141,15 +142,26 @@ function hmtdsecoverage(triples::Vector{DSETriple}, pg::Cite2Urn, height = 200, 
     verificationlink = md_dseoverview(pg, triples, ht = height, textfilter = textlist)
 
     textmsg = "$(textlist)"
-    hdr = "## Visualizations for verification: page *$(objectcomponent(pg))*; texts included: *$(textmsg)*\n\n### Completeness\n\n$(iliadrange)\n\nThe image is linked to the HMT Image Citation Tool where you can verify the completeness of DSE indexing.\n\n"
+    hdr = "## Visualizations for verification: page *$(objectcomponent(pg))*\n\nTexts included: *$(textmsg)*\n\n### Completeness\n\n$(iliadrange)\n\nThe image is linked to the HMT Image Citation Tool where you can verify the completeness of DSE indexing.\n\n"
 
     hdr * verificationlink
 end
 
-function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogCollection, triples::Vector{DSETriple})
+function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogCollection, triples::Vector{DSETriple}, textlist = [])
     surftriples = filter(tr -> tr.surface == pg, triples)
     surfpsgs = map(tr -> tr.passage, surftriples)
-    md_textpassages(surfpsgs, c, cat, triples = triples, mode = "illustratedtext")
+
+    
+    if isempty(textlist)
+        md_textpassages(surfpsgs, c, cat, triples = triples, mode = "illustratedtext")
+    else
+        filtered = []
+        for ref in textlist
+            push!(filtered, filter(u -> urncontains(ref, u), surfpsgs))
+        end
+        surfacefiltered = filtered |> Iterators.flatten |> collect
+        md_textpassages(surfacefiltered, c, cat, triples = triples, mode = "illustratedtext")
+    end
 end
 
 
@@ -183,7 +195,7 @@ callback!(
 
         accuracyhdr = "## Verify accuracy of indexing\n*Check that the diplomatic reading and the indexed image correspond.*\n\n"
        
-        accuracy =   accuracyhdr * hmtdseaccuracy(surfurn, corpus, catalog, dsec.data) |> dcc_markdown
+        accuracy =   accuracyhdr * hmtdseaccuracy(surfurn, corpus, catalog, dsec.data, txturns) |> dcc_markdown
         
         (completeness, accuracy)
     end
