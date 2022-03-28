@@ -31,7 +31,6 @@ function loaddata()
 
     (dse, normed, textcat, info)
 end
-
 (dsec, corpus, catalog, release) = loaddata()
 
 
@@ -57,6 +56,17 @@ function msmenu(triples)
     menupairs
 end
 
+
+
+function textsmenu(pg, triples)
+    surftriples = filter(tr -> tr.surface == pg, triples)
+    surfpsgs = map(tr -> droppassage(tr.passage), surftriples) .|>  string |> unique .|> CtsUrn
+    #opts = []
+    #opts =  [(label = workcomponent(dropversion(i)) |> string , value = i) for i in surfpsgs]
+    opts =  [(label = workcomponent(dropversion(i)), value = string(i)) for i in surfpsgs]
+    @info("Found $(length(opts)) text options for $(pg)")
+    opts
+end
 assetfolder = joinpath(pwd(), "dashboard", "assets")
 app = dash(assets_folder = assetfolder, include_assets_files=true)
 
@@ -83,23 +93,25 @@ app.layout = html_div(className = "w3-container") do
             dcc_dropdown(id = "surfacepicker")
         ]),
       
-        html_div(className = "w3-col l4 m4 s12",
+        ]
+    ),
+    html_div(className = "w3-container",
         children = [
             dcc_markdown("*Texts to verify*:")
-            dcc_dropdown(
+            dcc_checklist(
                 id = "texts",
+                labelStyle = Dict("display" => "inline-block")#=,
+
                 options = [
                     (label = "All texts", value = "all"),
                     (label = "Iliad only", value = "Iliad"),
                     (label = "scholia only", value = "scholia")
-                ],
-                value = "all",
-                clearable=false
+                ],=#
+                
             )
-        ]),
-       
         ]
     ),
+       
 
     html_div(id="dsecompleteness", className="w3-container"),
     html_div(id="dseaccuracy", className="w3-container")#,
@@ -117,38 +129,21 @@ callback!(app,
 end
 
 
-
-function hmtdse(triples, surf, ht, textfilter)
-    baseurl = "https://www.homermultitext.org/iipsrv"
-	root = "/project/homer/pyramidal/deepzoom"
-	
-    iiif =  IIIFservice(baseurl, root)
-    ict =  "https://www.homermultitext.org/ict2/?"
-
-
-    surfacetriples = filter(row -> urncontains(surf, row.surface), triples)
+function hmtdsecoverage(triples::Vector{DSETriple}, pg::Cite2Urn, height = 200, textlist = [])
+    @info("Text list is $(typeof(textlist)): nothing? $(isnothing(textlist))")
+    surfacetriples = filter(row -> urncontains(pg, row.surface), triples)
     iliadtriples = filter(row -> urncontains(CtsUrn("urn:cts:greekLit:tlg0012.tlg001:"), row.passage), surfacetriples)
     iliadrange = "Includes *Iliad* $(iliadtriples[1].passage |> passagecomponent)-$(iliadtriples[end].passage |> passagecomponent)."
 
-    
-    textsurfacetriples = surfacetriples
-    if textfilter == "Iliad"
-        textsurfacetriples = iliadtriples
-    elseif textfilter == "scholia"
-        textsurfacetriples = filter(row -> urncontains(CtsUrn("urn:cts:greekLit:tlg5026:"), row.passage), surfacetriples)
-    end
-    images = map(tr -> tr.image, textsurfacetriples)
-    ictlink = ict * "urn=" * join(images, "&urn=")
-    imgmd = markdownImage(dropsubref(images[1]), iiif; ht = ht)
-    verificationlink = string("[", imgmd, "](", ictlink, ")")
 
-    
+    #isnothing(textlist) || 
+    isempty(textlist) ? verificationlink = md_dseoverview(pg, triples, ht = height) :
+    verificationlink = md_dseoverview(pg, triples, ht = height, textfilter = textlist)
 
-    hdr = "## Visualizations for verification: page *$(objectcomponent(surf))*; texts included: *$(textfilter)*\n\n### Completeness\n\n$(iliadrange)\n\nThe image is linked to the HMT Image Citation Tool where you can verify the completeness of DSE indexing.\n\n"
+    textmsg = "$(textlist)"
+    hdr = "## Visualizations for verification: page *$(objectcomponent(pg))*; texts included: *$(textmsg)*\n\n### Completeness\n\n$(iliadrange)\n\nThe image is linked to the HMT Image Citation Tool where you can verify the completeness of DSE indexing.\n\n"
 
     hdr * verificationlink
-    
-
 end
 
 function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogCollection, triples::Vector{DSETriple})
@@ -157,29 +152,39 @@ function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogColl
     md_textpassages(surfpsgs, c, cat, triples = triples, mode = "illustratedtext")
 end
 
+
+# Set choices of checkboxes for texts to include in overlay:
+callback!(app,
+    Output("texts", "options"),
+    Input("surfacepicker", "value")
+) do pg
+    isnothing(pg) ? [] : textsmenu(Cite2Urn(pg), dsec.data)
+end
+
+
+
 # Update validation/verification sections of page when surface is selected:
 callback!(
     app,
     Output("dsecompleteness", "children"),
     Output("dseaccuracy", "children"),
+
     Input("surfacepicker", "value"),
     Input("texts", "value")
+    
 ) do newsurface, txt_choice
     if isnothing(newsurface) || isempty(newsurface)
         (dcc_markdown(""), dcc_markdown(""))#, dcc_markdown(""))
     else
         surfurn = Cite2Urn(newsurface)
-        completeness = dcc_markdown(hmtdse(dsec.data, surfurn, THUMBHEIGHT, txt_choice))
+        txturns = isnothing(txt_choice) ? [] : txt_choice .|> CtsUrn
+        completeness = hmtdsecoverage(dsec.data, surfurn, THUMBHEIGHT, txturns) |> dcc_markdown
        
 
-        accuracyhdr = "### Verify accuracy of indexing\n*Check that the diplomatic reading and the indexed image correspond.*\n\n"
+        accuracyhdr = "## Verify accuracy of indexing\n*Check that the diplomatic reading and the indexed image correspond.*\n\n"
        
-        accuracy =   hmtdseaccuracy(surfurn, corpus, catalog, dsec.data) |> dcc_markdown
+        accuracy =   accuracyhdr * hmtdseaccuracy(surfurn, corpus, catalog, dsec.data) |> dcc_markdown
         
-        #dcc_markdown(md_textpassages(sampleurns, corpus, catalog, triples = dse, mode = "illustratedtext"))
-        # dcc_markdown("### Accuracy\n\n" * )
-        #hmtdseaccuracy(dsec.data,surfurn, TEXTHEIGHT, txt_choice) |> dcc_markdown
-      
         (completeness, accuracy)
     end
 end
