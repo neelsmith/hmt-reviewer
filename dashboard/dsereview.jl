@@ -56,15 +56,11 @@ function msmenu(triples)
     menupairs
 end
 
-
-
 function textsmenu(pg, triples)
     surftriples = filter(tr -> tr.surface == pg, triples)
     surfpsgs = map(tr -> droppassage(tr.passage), surftriples) .|>  string |> unique .|> CtsUrn
-    #opts = []
-    #opts =  [(label = workcomponent(dropversion(i)) |> string , value = i) for i in surfpsgs]
     opts =  [(label = workcomponent(dropversion(i)), value = string(i)) for i in surfpsgs]
-    @info("Found $(length(opts)) text options for $(pg)")
+    @debug("Found $(length(opts)) text options for $(pg)")
     opts
 end
 assetfolder = joinpath(pwd(), "dashboard", "assets")
@@ -100,14 +96,7 @@ app.layout = html_div(className = "w3-container") do
             dcc_markdown("*Texts to verify*:")
             dcc_checklist(
                 id = "texts",
-                labelStyle = Dict("display" => "inline-block")#=,
-
-                options = [
-                    (label = "All texts", value = "all"),
-                    (label = "Iliad only", value = "Iliad"),
-                    (label = "scholia only", value = "scholia")
-                ],=#
-                
+                labelStyle = Dict("display" => "inline-block")
             )
         ]
     ),
@@ -128,16 +117,12 @@ callback!(app,
     surfacemenu(dsec.data, siglum)
 end
 
-
+"""Compose markdown string for DSE coverage block."""
 function hmtdsecoverage(triples::Vector{DSETriple}, pg::Cite2Urn, height = 200, textlist = [])
-    
     surfacetriples = filter(row -> urncontains(pg, row.surface), triples)
     iliadtriples = filter(row -> urncontains(CtsUrn("urn:cts:greekLit:tlg0012.tlg001:"), row.passage), surfacetriples)
-    iliadrange = "Includes *Iliad* $(iliadtriples[1].passage |> passagecomponent)-$(iliadtriples[end].passage |> passagecomponent)."
+    iliadrange = isempty(iliadtriples) ? "(No *Iliad* text on $(pg).)" : "Covers *Iliad* $(iliadtriples[1].passage |> passagecomponent)-$(iliadtriples[end].passage |> passagecomponent)."
 
-
-
-    #isnothing(textlist) || 
     isempty(textlist) ? verificationlink = md_dseoverview(pg, triples, ht = height) :
     verificationlink = md_dseoverview(pg, triples, ht = height, textfilter = textlist)
 
@@ -147,11 +132,12 @@ function hmtdsecoverage(triples::Vector{DSETriple}, pg::Cite2Urn, height = 200, 
     hdr * verificationlink
 end
 
+
+"""Compose markdown string for DSE accuracy block."""
 function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogCollection, triples::Vector{DSETriple}, textlist = [])
     surftriples = filter(tr -> tr.surface == pg, triples)
     surfpsgs = map(tr -> tr.passage, surftriples)
 
-    
     if isempty(textlist)
         md_textpassages(surfpsgs, c, cat, triples = triples, mode = "illustratedtext")
     else
@@ -160,6 +146,7 @@ function hmtdseaccuracy(pg::Cite2Urn, c::CitableTextCorpus, cat::TextCatalogColl
             push!(filtered, filter(u -> urncontains(ref, u), surfpsgs))
         end
         surfacefiltered = filtered |> Iterators.flatten |> collect
+        @debug("surfacefiltered: $(surfacefiltered)")
         md_textpassages(surfacefiltered, c, cat, triples = triples, mode = "illustratedtext")
     end
 end
@@ -172,8 +159,6 @@ callback!(app,
 ) do pg
     isnothing(pg) ? [] : textsmenu(Cite2Urn(pg), dsec.data)
 end
-
-
 
 # Update validation/verification sections of page when surface is selected:
 callback!(
