@@ -19,9 +19,6 @@ using HmtArchive, HmtArchive.Analysis
 THUMBHEIGHT = 200
 TEXTHEIGHT = 600
 
-
-
-
 function loaddata()
     src = hmt_cex()
     dse = hmt_dse(src)[1]
@@ -67,7 +64,7 @@ assetfolder = joinpath(pwd(), "dashboard", "assets")
 app = dash(assets_folder = assetfolder, include_assets_files=true)
 
 app.layout = html_div(className = "w3-container") do
-    html_div(className = "w3-container w3-light-gray w3-cell w3-mobile w3-border-left  w3-border-right w3-border-gray", children = [dcc_markdown("*Dashboard version*: **$(DASHBOARD_VERSION)** ([version notes](https://homermultitext.github.io/dashboards/alpha-search/))")]),
+    html_div(className = "w3-container w3-light-gray w3-cell w3-mobile w3-border-left  w3-border-right w3-border-gray", children = [dcc_markdown("*Dashboard version*: **$(DASHBOARD_VERSION)**")]),
     
     html_h1("HMT project: DSE verification dashboard"),
     dcc_markdown("Validate and verify content of **$(release)**."),
